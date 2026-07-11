@@ -1,18 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { fetchProtocol } from "../api";
 
-const PIPELINE = [
-  "Per-image scale-bar calibration",
-  "CLAHE + bilateral preprocess",
-  "Multi-algorithm consensus edges",
-  "Geometric tip gates + ridge grouping",
-  "Method 1 / 2 / 3 (separate, nm-based)",
-  "Median summary of accepted tips",
-];
+// Pipeline panel hidden for now
+// const PIPELINE = [ ... ];
 
 const DEFAULT_PROTOCOL = {
-  method1_distances_nm: [25, 50, 100, 200],
-  method1_primary_nm: 100,
+  method1_distances_nm: [50],
+  method1_primary_nm: 50,
   method2_fit_lo_nm: 50,
   method2_fit_hi_nm: 200,
   method3_circle_diameter_nm: 100,
@@ -24,6 +18,7 @@ export default function Sidebar({ apiOnline, loading, onAnalyze, onSample }) {
   const [image, setImage] = useState(null);
   const [calibration, setCalibration] = useState(null);
   const [groundTruth, setGroundTruth] = useState(null);
+  const [nmPerPixel, setNmPerPixel] = useState("");
   const [dragging, setDragging] = useState(false);
   const [protocol, setProtocol] = useState(DEFAULT_PROTOCOL);
   const imageRef = useRef();
@@ -36,9 +31,13 @@ export default function Sidebar({ apiOnline, loading, onAnalyze, onSample }) {
       .then((data) => {
         const p = data.protocol || {};
         const band = p.method2_fit_band_nm || [50, 200];
+        // Prefer single primary l; ignore stale multi-l lists from older backends
+        const distances = p.method1_distances_nm?.length === 1
+          ? p.method1_distances_nm
+          : (p.method1_primary_nm ? [Number(p.method1_primary_nm)] : [50]);
         setProtocol({
-          method1_distances_nm: p.method1_distances_nm || [25, 50, 100, 200],
-          method1_primary_nm: p.method1_primary_nm ?? 100,
+          method1_distances_nm: distances,
+          method1_primary_nm: p.method1_primary_nm ?? 50,
           method2_fit_lo_nm: band[0] ?? 50,
           method2_fit_hi_nm: band[1] ?? 200,
           method3_circle_diameter_nm: p.method3_circle_diameter_nm ?? 100,
@@ -94,6 +93,17 @@ export default function Sidebar({ apiOnline, loading, onAnalyze, onSample }) {
 
         <div className="optional-uploads">
           <label className="field">
+            <span>nm per pixel (optional override)</span>
+            <input
+              type="number"
+              min={0.001}
+              step="any"
+              placeholder="Auto from Zeiss TIFF tags"
+              value={nmPerPixel}
+              onChange={(e) => setNmPerPixel(e.target.value)}
+            />
+          </label>
+          <label className="field">
             <span>Scale-bar calibration (JSON/CSV)</span>
             <input ref={calRef} type="file" accept=".json,.csv" onChange={(e) => setCalibration(e.target.files[0] || null)} />
           </label>
@@ -108,7 +118,7 @@ export default function Sidebar({ apiOnline, loading, onAnalyze, onSample }) {
             type="button"
             className="btn btn-primary"
             disabled={!image || loading || !apiOnline}
-            onClick={() => onAnalyze(image, calibration, groundTruth, protocol)}
+            onClick={() => onAnalyze(image, calibration, groundTruth, protocol, nmPerPixel)}
           >
             Run analysis
           </button>
@@ -119,16 +129,21 @@ export default function Sidebar({ apiOnline, loading, onAnalyze, onSample }) {
       </section>
 
       <section className={`panel protocol-panel ${protocol.approved ? "protocol-approved" : "protocol-pending"}`}>
-        <h2>Measurement protocol</h2>
-        <p className="protocol-note">
-          Proposed defaults — approve <em>l</em>, fit band, and <em>D</em> with the client before treating as a lab standard.
+        <h2>Fixed distance inscribed circle</h2>
+        <p className="protocol-note" style={{ whiteSpace: "pre-line" }}>
+          {"1. Identify ultimate tip (top blue dot)\n" +
+            "2. Project a horizontal (red) line a predefined set distance \"l\" below upper dot (l = 100 nm)\n" +
+            "3. Identify intersection of red line with blade edge (lower 2 blue dots)\n" +
+            "4. Inscribe a circle using 3 blue dots\n" +
+            "5. Output is the radius of this circle\n" +
+            "Small radius = sharper tip. Large radius = more rounded or blunt tip."}
         </p>
 
         <div className="protocol-fields">
           <div className="protocol-group">
-            <h3 className="protocol-group-title">Method 1</h3>
+            <h3 className="protocol-group-title">Fixed distance l</h3>
             <label className="field">
-              <span>Distances l (nm)</span>
+              <span>Distance l (nm)</span>
               <input
                 type="text"
                 value={distancesStr}
@@ -142,7 +157,7 @@ export default function Sidebar({ apiOnline, loading, onAnalyze, onSample }) {
               />
             </label>
             <label className="field">
-              <span>Primary (nm)</span>
+              <span>Primary l (nm)</span>
               <input
                 type="number"
                 min={1}
@@ -152,42 +167,16 @@ export default function Sidebar({ apiOnline, loading, onAnalyze, onSample }) {
             </label>
           </div>
 
+          {/* Method 2 / Method 3 protocol fields — hidden for now
           <div className="protocol-group">
             <h3 className="protocol-group-title">Method 2</h3>
-            <div className="field-row">
-              <label className="field">
-                <span>Band lo (nm)</span>
-                <input
-                  type="number"
-                  min={0}
-                  value={protocol.method2_fit_lo_nm}
-                  onChange={(e) => setProtocol((p) => ({ ...p, method2_fit_lo_nm: Number(e.target.value) }))}
-                />
-              </label>
-              <label className="field">
-                <span>Band hi (nm)</span>
-                <input
-                  type="number"
-                  min={0}
-                  value={protocol.method2_fit_hi_nm}
-                  onChange={(e) => setProtocol((p) => ({ ...p, method2_fit_hi_nm: Number(e.target.value) }))}
-                />
-              </label>
-            </div>
+            ...
           </div>
-
           <div className="protocol-group">
             <h3 className="protocol-group-title">Method 3</h3>
-            <label className="field">
-              <span>Circle D (nm)</span>
-              <input
-                type="number"
-                min={1}
-                value={protocol.method3_circle_diameter_nm}
-                onChange={(e) => setProtocol((p) => ({ ...p, method3_circle_diameter_nm: Number(e.target.value) }))}
-              />
-            </label>
+            ...
           </div>
+          */}
         </div>
 
         <label className="protocol-approval">
@@ -212,14 +201,7 @@ export default function Sidebar({ apiOnline, loading, onAnalyze, onSample }) {
         )}
       </section>
 
-      <section className="panel pipeline-panel">
-        <h2>Hybrid pipeline</h2>
-        <ol className="pipeline-steps">
-          {PIPELINE.map((step) => (
-            <li key={step}>{step}</li>
-          ))}
-        </ol>
-      </section>
+      {/* <section className="panel pipeline-panel"> ... hidden for now </section> */}
     </aside>
   );
 }

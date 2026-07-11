@@ -1,5 +1,32 @@
 const API_BASE = import.meta.env.VITE_API_URL || "";
 
+async function parseResponse(res, fallbackMessage) {
+  const text = await res.text();
+  let data = null;
+  if (text) {
+    try {
+      data = JSON.parse(text);
+    } catch {
+      console.error("Non-JSON API response:", text.slice(0, 500));
+    }
+  } else {
+    console.error("Empty API response", res.status, res.statusText);
+  }
+
+  if (!res.ok) {
+    const detail =
+      (data && (data.detail || data.message)) ||
+      (text ? text.slice(0, 300) : null) ||
+      `${fallbackMessage} (HTTP ${res.status})`;
+    throw new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
+  }
+
+  if (data == null) {
+    throw new Error(`${fallbackMessage}: empty or invalid JSON response`);
+  }
+  return data;
+}
+
 export async function checkHealth() {
   const res = await fetch(`${API_BASE}/api/health`);
   if (!res.ok) throw new Error("API unreachable");
@@ -12,11 +39,14 @@ export async function fetchProtocol() {
   return res.json();
 }
 
-export async function analyzeImage(image, calibration, groundTruth, protocol) {
+export async function analyzeImage(image, calibration, groundTruth, protocol, nmPerPixel) {
   const form = new FormData();
   form.append("image", image);
   if (calibration) form.append("calibration", calibration);
   if (groundTruth) form.append("ground_truth", groundTruth);
+  if (nmPerPixel != null && nmPerPixel !== "" && Number(nmPerPixel) > 0) {
+    form.append("nm_per_pixel", String(nmPerPixel));
+  }
   if (protocol) {
     if (protocol.method1_distances_nm?.length) {
       form.append("method1_distances_nm", protocol.method1_distances_nm.join(","));
@@ -40,16 +70,12 @@ export async function analyzeImage(image, calibration, groundTruth, protocol) {
   }
 
   const res = await fetch(`${API_BASE}/api/analyze`, { method: "POST", body: form });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.detail || "Analysis failed");
-  return data;
+  return parseResponse(res, "Analysis failed");
 }
 
 export async function analyzeSample() {
   const res = await fetch(`${API_BASE}/api/analyze/sample`, { method: "POST" });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.detail || "Sample analysis failed");
-  return data;
+  return parseResponse(res, "Sample analysis failed");
 }
 
 export function fileUrl(path) {

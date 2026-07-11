@@ -2,9 +2,9 @@ const fmt = (v, d = 2) => (v == null || Number.isNaN(v) ? "—" : Number(v).toFi
 const label = (s) => s.replace(/_/g, " ");
 
 const METHOD_LABELS = {
-  fixed_distance_circle: "Method 1 — Fixed-distance inscribed circle",
-  projected_tip_distance: "Method 2 — Projected tip distance (primary)",
-  inscribed_angle: "Method 3 — Inscribed angle",
+  fixed_distance_circle: "Fixed distance inscribed circle",
+  projected_tip_distance: "Distance from projected tip",
+  inscribed_angle: "Inscribed angle from fixed diameter circle",
 };
 
 const HIDDEN_KEYS = new Set([

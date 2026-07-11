@@ -1,241 +1,498 @@
-import { fileUrl } from "../api";
-import BladeValueTable from "./BladeValueTable";
 import MethodPanel from "./MethodPanel";
-import MetricsGrid from "./MetricsGrid";
-import RadiiTable from "./RadiiTable";
-import TiltWarning from "./TiltWarning";
-import ValidationPanel from "./ValidationPanel";
 
 const fmt = (v, d = 2) => (v == null || Number.isNaN(v) ? "—" : Number(v).toFixed(d));
 
-const METHOD_CONFIG = [
-  {
-    key: "fixed_distance_circle",
-    title: "Method 1 — Fixed-distance inscribed circle",
-    description:
-      "Physical l (nm) → scan line; circle through tip + left/right intersections. Reports R25–R200; headline = median R100.",
-    imageKey: "method1",
-    csvKey: "method1_csv",
-    valueKey: "median_radius_nm",
-    fallbackKey: "mean_radius_nm",
-    meanLabel: "Median R100",
-    meanFmt: (v) => `${fmt(v)} nm`,
-    columns: [
-      { key: "peak_id", label: "Peak" },
-      { key: "peak_x", label: "X", format: (v) => fmt(v, 1) },
-      { key: "peak_y", label: "Y", format: (v) => fmt(v, 1) },
-      { key: "radius_nm", label: "R100 (nm)", format: (v) => fmt(v) },
-      { key: "R25_nm", label: "R25", format: (v) => fmt(v) },
-      { key: "R50_nm", label: "R50", format: (v) => fmt(v) },
-      { key: "R200_nm", label: "R200", format: (v) => fmt(v) },
-    ],
-    rowMap: (c) => ({
-      peak_id: c.peak_id,
-      peak_x: c.peak_location?.[0],
-      peak_y: c.peak_location?.[1],
-      radius_nm: c.radius_nm,
-      R25_nm: c.radii_by_l?.R25?.radius_nm,
-      R50_nm: c.radii_by_l?.R50?.radius_nm,
-      R200_nm: c.radii_by_l?.R200?.radius_nm,
-    }),
-  },
-  {
-    key: "projected_tip_distance",
-    title: "Method 2 — Projected tip distance",
-    description: "Flank lines fit over 50–200 nm below tip; distance from projected apex to tip. Headline = median l.",
-    imageKey: "method2",
-    csvKey: "method2_csv",
-    valueKey: "median_distance_l_nm",
-    fallbackKey: "mean_distance_l_nm",
-    meanLabel: "Median l",
-    meanFmt: (v) => `${fmt(v)} nm`,
-    columns: [
-      { key: "peak_id", label: "Peak" },
-      { key: "peak_x", label: "X", format: (v) => fmt(v, 1) },
-      { key: "peak_y", label: "Y", format: (v) => fmt(v, 1) },
-      { key: "distance_l_nm", label: "l (nm)", format: (v) => fmt(v) },
-      { key: "included_angle_deg", label: "α (°)", format: (v) => fmt(v) },
-      { key: "area_under_curve_nm2", label: "A (nm²)", format: (v) => fmt(v, 1) },
-    ],
-    rowMap: (c) => ({
-      peak_id: c.peak_id,
-      peak_x: c.peak_location?.[0],
-      peak_y: c.peak_location?.[1],
-      distance_l_nm: c.distance_l_nm,
-      included_angle_deg: c.included_angle_deg,
-      area_under_curve_nm2: c.area_under_curve_nm2,
-    }),
-  },
-  {
-    key: "inscribed_angle",
-    title: "Method 3 — Inscribed angle",
-    description: "Fixed physical circle diameter D (default 100 nm). Output is included angle θ — not a radius.",
-    imageKey: "method3",
-    csvKey: "method3_csv",
-    valueKey: "median_angle_deg",
-    fallbackKey: "mean_angle_deg",
-    meanLabel: "Median θ100",
-    meanFmt: (v) => `${fmt(v)}°`,
-    columns: [
-      { key: "peak_id", label: "Peak" },
-      { key: "peak_x", label: "X", format: (v) => fmt(v, 1) },
-      { key: "peak_y", label: "Y", format: (v) => fmt(v, 1) },
-      { key: "angle_degrees", label: "θ (°)", format: (v) => fmt(v) },
-    ],
-    rowMap: (c) => ({
-      peak_id: c.peak_id,
-      peak_x: c.peak_location?.[0],
-      peak_y: c.peak_location?.[1],
-      angle_degrees: c.angle_degrees,
-    }),
-  },
-];
+/** PDF slide 2 — Fixed distance inscribed circle */
+const METHOD1 = {
+  key: "fixed_distance_circle",
+  title: "Fixed distance inscribed circle",
+  description:
+    "1. Identify ultimate tip (top blue dot)\n" +
+    "2. Project a horizontal (red) line a predefined set distance \"l\" below upper dot\n" +
+    "3. Identify intersection of red line with blade edge (lower 2 blue dots)\n" +
+    "4. Inscribe a circle using 3 blue dots\n" +
+    "5. Output is the radius of this circle\n" +
+    "Small radius = sharper tip. Large radius = more rounded or blunt tip.",
+  imageKey: "method1",
+  csvKey: "method1_csv",
+  valueKey: "median_radius_nm",
+  fallbackKey: "mean_radius_nm",
+  meanLabel: "Median R",
+  meanFmt: (v) => `${fmt(v)} nm`,
+  columns: [
+    { key: "peak_id", label: "Peak" },
+    { key: "peak_x", label: "X", format: (v) => fmt(v, 1) },
+    { key: "peak_y", label: "Y", format: (v) => fmt(v, 1) },
+    { key: "radius_nm", label: "R (nm)", format: (v) => fmt(v) },
+  ],
+  rowMap: (c) => ({
+    peak_id: c.peak_id,
+    peak_x: c.peak_location?.[0] ?? c.tip_point?.[0],
+    peak_y: c.peak_location?.[1] ?? c.tip_point?.[1],
+    radius_nm: c.radius_nm,
+  }),
+};
 
-const RESEARCH_COLUMNS = [
-  { key: "peak_id", label: "Peak" },
-  { key: "radius_um", label: "R (μm)", format: (v) => fmt(v, 3) },
-  { key: "included_angle_deg", label: "α (°)", format: (v) => fmt(v, 1) },
-  { key: "distance_l_nm", label: "l (nm)", format: (v) => fmt(v) },
-  { key: "confidence_score", label: "Confidence", format: (v) => `${fmt(v * 100, 1)}%` },
-  { key: "fit_residual_nm", label: "Residual (nm)", format: (v) => fmt(v, 3) },
-  { key: "geometric_valid", label: "Geo valid", format: (v) => (v ? "Yes" : "No") },
-];
+/** PDF slide 3 — Distance from projected tip */
+const METHOD2 = {
+  key: "projected_tip_distance",
+  title: "Distance from projected tip",
+  description:
+    "1. Project edges of arch (yellow) to a convergent point\n" +
+    "2. Draw vertical line (red) down to ultimate tip (blue)\n" +
+    "3. Output is length of red line \"l\"",
+  imageKey: "method2",
+  csvKey: "method2_csv",
+  valueKey: "median_distance_l_nm",
+  fallbackKey: "median",
+  meanLabel: "Median l",
+  meanFmt: (v) => `${fmt(v)} nm`,
+  columns: [
+    { key: "peak_id", label: "Peak" },
+    { key: "peak_x", label: "X", format: (v) => fmt(v, 1) },
+    { key: "peak_y", label: "Y", format: (v) => fmt(v, 1) },
+    { key: "distance_l_nm", label: "l (nm)", format: (v) => fmt(v) },
+  ],
+  rowMap: (c) => ({
+    peak_id: c.peak_id ?? c.tip_id,
+    peak_x: c.peak_location?.[0] ?? c.tip_point?.[0],
+    peak_y: c.peak_location?.[1] ?? c.tip_point?.[1],
+    distance_l_nm: c.distance_l_nm,
+  }),
+};
 
-function ProtocolBanner({ protocol }) {
-  if (!protocol) return null;
-  const approved = protocol.approved;
-  const l = (protocol.method1_distances_nm || []).join(", ");
-  const band = protocol.method2_fit_band_nm || [];
-  const lo = band[0] ?? protocol.method2_fit_lo_nm;
-  const hi = band[1] ?? protocol.method2_fit_hi_nm;
-  const d = protocol.method3_circle_diameter_nm;
-  const primary = protocol.method1_primary_nm ?? 100;
+/** PDF slide 4 — Inscribed angle from fixed radius circle */
+const METHOD3 = {
+  key: "inscribed_angle",
+  title: "Inscribed angle from fixed diameter circle",
+  description:
+    "1. Inscribe circle of predetermined diameter \"D\"\n" +
+    "2. Project two lines from ultimate tip through circle/blade intersections\n" +
+    "3. Output angle θ between those lines",
+  imageKey: "method3",
+  csvKey: "method3_csv",
+  valueKey: "median",
+  fallbackKey: "mean",
+  meanLabel: "Median θ",
+  meanFmt: (v) => `${fmt(v)}°`,
+  columns: [
+    { key: "peak_id", label: "Peak" },
+    { key: "peak_x", label: "X", format: (v) => fmt(v, 1) },
+    { key: "peak_y", label: "Y", format: (v) => fmt(v, 1) },
+    { key: "angle_degrees", label: "θ (°)", format: (v) => fmt(v) },
+  ],
+  rowMap: (c) => ({
+    peak_id: c.peak_id ?? c.tip_id,
+    peak_x: c.peak_location?.[0] ?? c.tip_point?.[0],
+    peak_y: c.peak_location?.[1] ?? c.tip_point?.[1],
+    angle_degrees: c.angle_degrees,
+  }),
+};
+
+/** Approach 3 — OpenAI peaks + contour → OpenCV refine → circle fit */
+const APPROACH3 = {
+  key: "approach3_openai_vlm",
+  title: "Approach 3 — OpenAI Vision + Circle Fit",
+  description:
+    "1. OpenCV preprocess (shared pipeline)\n" +
+    "2. OpenAI detects all tip peaks (ignore noise)\n" +
+    "3. Crop each peak ROI\n" +
+    "4. OpenAI outlines the curved apex (polygon + confidence)\n" +
+    "5. OpenCV refines contour via edge snap\n" +
+    "6. Circle fit (Pratt / Taubin / least-squares) → R in nm\n" +
+    "Requires OPENAI_API_KEY in backend .env",
+  imageKey: "method1_approach3",
+  csvKey: "method1_approach3_csv",
+  valueKey: "mean_radius_nm",
+  fallbackKey: "median_radius_nm",
+  meanLabel: "Mean R (OpenAI + circle fit)",
+  meanFmt: (v) => `${fmt(v)} nm`,
+  columns: [
+    { key: "peak_id", label: "Peak" },
+    { key: "peak_x", label: "X", format: (v) => fmt(v, 1) },
+    { key: "peak_y", label: "Y", format: (v) => fmt(v, 1) },
+    { key: "radius_nm", label: "R (nm)", format: (v) => fmt(v) },
+    { key: "vlm_confidence", label: "Conf.", format: (v) => (v == null ? "—" : fmt(v, 2)) },
+    { key: "fit_method", label: "Fit" },
+  ],
+  rowMap: (c) => ({
+    peak_id: c.peak_id,
+    peak_x: c.peak_location?.[0] ?? c.tip_point?.[0],
+    peak_y: c.peak_location?.[1] ?? c.tip_point?.[1],
+    radius_nm: c.radius_nm,
+    vlm_confidence: c.vlm_confidence,
+    fit_method: c.fit_method,
+  }),
+};
+
+function formatValue(v) {
+  if (v == null) return "—";
+  if (typeof v === "number") return Number.isInteger(v) ? String(v) : Number(v).toFixed(4);
+  if (typeof v === "object") {
+    if (v.value != null) {
+      return v.unit ? `${v.value} ${v.unit}` : String(v.value);
+    }
+    if (v.text) return v.text;
+    try {
+      return JSON.stringify(v);
+    } catch {
+      return String(v);
+    }
+  }
+  return String(v);
+}
+
+function ExtractedValuesPanel({ calibration }) {
+  if (!calibration) return null;
+  const combined = calibration.extracted_values || {};
+  const zeissAll = calibration.zeiss_all || {};
+  const ocr = calibration.ocr || {};
+  const ocrValues = ocr.values || {};
+  const hasAnything =
+    Object.keys(combined).length > 0 ||
+    Object.keys(zeissAll).length > 0 ||
+    (ocr.raw_text && ocr.raw_text.length > 0);
+
+  if (!hasAnything) return null;
+
+  const combinedRows = Object.entries(combined).map(([k, v]) => ({
+    key: k,
+    value: formatValue(v),
+  }));
+  const ocrRows = Object.entries(ocrValues)
+    .filter(([k]) => !String(k).startsWith("_") && !String(k).startsWith("line_"))
+    .map(([k, v]) => ({ key: k, value: formatValue(v) }));
+  const zeissRows = Object.entries(zeissAll).map(([k, v]) => ({
+    key: k,
+    value: formatValue(v),
+  }));
 
   return (
-    <div className={`protocol-banner ${approved ? "approved" : "pending"}`}>
-      <strong>Measurement protocol</strong>
-      {!approved ? (
-        <p className="protocol-banner-note">
-          Proposed defaults — approve <em>l</em>, fit band, and <em>D</em> with the client before treating as a lab standard.
+    <section className="card method-panel" style={{ marginBottom: "1.25rem" }}>
+      <div className="card-header">
+        <div>
+          <h3>SEM values (OCR + Zeiss metadata)</h3>
+          <p className="muted method-desc">
+            Engine: {ocr.engine || "—"}
+            {" · "}
+            OCR lines: {(ocr.lines || []).length}
+            {" · "}
+            Zeiss keys: {Object.keys(zeissAll).length}
+          </p>
+        </div>
+      </div>
+      {ocr.raw_text ? (
+        <p className="protocol-banner-note" style={{ marginTop: "0.5rem", whiteSpace: "pre-wrap" }}>
+          <strong>OCR text:</strong>
+          {"\n"}
+          {ocr.raw_text}
         </p>
-      ) : (
-        <p className="protocol-banner-note">Client has approved these values.</p>
+      ) : null}
+      {combinedRows.length > 0 && (
+        <>
+          <h4 style={{ margin: "0.75rem 0 0.35rem", fontSize: "0.9rem" }}>Combined fields</h4>
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Field</th>
+                <th>Value</th>
+              </tr>
+            </thead>
+            <tbody>
+              {combinedRows.map((r) => (
+                <tr key={`c-${r.key}`}>
+                  <td>{r.key}</td>
+                  <td style={{ wordBreak: "break-word" }}>{r.value}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </>
       )}
-      <dl className="protocol-banner-params">
-        <div>
-          <dt>Method 1 distances l (nm)</dt>
-          <dd>{l || "—"}</dd>
-        </div>
-        <div>
-          <dt>Method 1 primary (nm)</dt>
-          <dd>{primary}</dd>
-        </div>
-        <div>
-          <dt>Method 2 band (nm)</dt>
-          <dd>{lo ?? "—"} – {hi ?? "—"}</dd>
-        </div>
-        <div>
-          <dt>Method 3 circle D (nm)</dt>
-          <dd>{d ?? "—"}</dd>
-        </div>
-      </dl>
+      {ocrRows.length > 0 && (
+        <>
+          <h4 style={{ margin: "0.75rem 0 0.35rem", fontSize: "0.9rem" }}>OCR-parsed</h4>
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Field</th>
+                <th>Value</th>
+              </tr>
+            </thead>
+            <tbody>
+              {ocrRows.map((r) => (
+                <tr key={`o-${r.key}`}>
+                  <td>{r.key}</td>
+                  <td style={{ wordBreak: "break-word" }}>{r.value}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </>
+      )}
+      {zeissRows.length > 0 && (
+        <>
+          <h4 style={{ margin: "0.75rem 0 0.35rem", fontSize: "0.9rem" }}>
+            Zeiss SmartSEM ({zeissRows.length})
+          </h4>
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Key</th>
+                <th>Value</th>
+              </tr>
+            </thead>
+            <tbody>
+              {zeissRows.map((r) => (
+                <tr key={`z-${r.key}`}>
+                  <td>{r.key}</td>
+                  <td style={{ wordBreak: "break-word" }}>{r.value}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </>
+      )}
+    </section>
+  );
+}
+
+function TipRadiusBanner({ protocol, tipCondition, calibration, nmPerPixel }) {
+  const primary = protocol?.method1_primary_nm ?? 50;
+  const d3 = protocol?.method3_circle_diameter_nm ?? 100;
+  const source = calibration?.calibration_source;
+  const untrusted =
+    Number(nmPerPixel) === 1 &&
+    (source === "config_default" || source === "tiff_metadata" || !source);
+  return (
+    <div className={`protocol-banner ${untrusted ? "pending" : "approved"}`}>
+      <strong>Tip Radius Measurement — PDF Methods 1–3 + OpenAI Approach 3</strong>
+      <p className="protocol-banner-note" style={{ whiteSpace: "pre-line" }}>
+        {"Method 1 — Fixed distance inscribed circle (l = " +
+          primary +
+          " nm)\n" +
+          "Method 2 — Distance from projected tip\n" +
+          "Method 3 — Inscribed angle from fixed diameter circle (D = " +
+          d3 +
+          " nm)\n" +
+          "Approach 3 — OpenAI peaks + contour → circle fit"}
+      </p>
+      <p className="protocol-banner-note">
+        Scale: {nmPerPixel != null ? `${Number(nmPerPixel).toFixed(4)} nm/px` : "—"}
+        {source ? ` (${source})` : ""}
+      </p>
+      {untrusted && (
+        <p className="protocol-banner-note">
+          Untrusted scale (nm/px≈1). Enter <strong>nm per pixel</strong> in the sidebar or upload a
+          calibration file, then re-run — otherwise measurements cannot be trusted.
+        </p>
+      )}
+      {tipCondition && (
+        <p className="protocol-banner-note">
+          Classification: <strong>{tipCondition}</strong>
+          {tipCondition === "sharp" && " — small radius, sharper tip"}
+          {tipCondition === "moderate" && " — intermediate tip radius"}
+          {tipCondition === "blunt" && " — large radius, more rounded or blunt tip"}
+        </p>
+      )}
     </div>
   );
 }
 
+function methodHeadline(data, def) {
+  return (
+    data?.[def.valueKey] ??
+    data?.median ??
+    data?.[def.fallbackKey] ??
+    data?.mean ??
+    data?.headline_value ??
+    null
+  );
+}
+
 export default function ResultsDashboard({ result }) {
-  const annotated = fileUrl(result.files?.annotated);
   const bs = result.brainstorming_methods || result.alternative_methods || {};
   const protocol = result.protocol || bs.protocol || {};
-  const tipVal = bs.tip_validation || {};
-  const rg = result.research_grade || {};
-  const rgSummary = rg.summary || {};
-  const rgCurves = (rg.per_curve || []).filter((c) => !c.rejected);
+  const primaryL = protocol.method1_primary_nm ?? 50;
+  const d3 = protocol.method3_circle_diameter_nm ?? 100;
+
+  const m1 = bs[METHOD1.key] || {};
+  const m2 = bs[METHOD2.key] || {};
+  const m3 = bs[METHOD3.key] || {};
+  const a3 = bs[APPROACH3.key] || {};
+
+  const m1Curves = m1.per_curve || [];
+  const m1Failed = m1.failed_curves || [];
+  const m2Curves = m2.per_curve || [];
+  const m3Curves = m3.per_curve || [];
+  const a3Curves = a3.per_curve || [];
+  const a3Failed = a3.failed_curves || [];
+
+  const m1Val = methodHeadline(m1, METHOD1);
+  const m2Val = methodHeadline(m2, METHOD2);
+  const m3Val = methodHeadline(m3, METHOD3);
+  const a3Val = methodHeadline(a3, APPROACH3);
+  // Method 3 summarize_values puts angle under "median" / also check median_angle_deg
+  const m3Angle = m3Val ?? m3.median_angle_deg ?? m3.mean_angle_deg;
+
+  const nMarked = m1.n_marked ?? m1Curves.length + m1Failed.length;
+  const openaiOk = a3.openai?.ok;
+  const openaiErr = a3.openai?.error;
+
+  const failRows = m1Failed.map((c) => ({
+    peak_id: c.peak_id,
+    peak_x: c.peak_location?.[0],
+    peak_y: c.peak_location?.[1],
+    radius_nm: c.rejection_reason || c.method1_rejection_reason || "—",
+  }));
 
   return (
     <div className="results">
-      <TiltWarning tilt={result.tilt_correction} />
-      <ProtocolBanner protocol={protocol} />
-      <MetricsGrid result={result} />
+      <TipRadiusBanner
+        protocol={protocol}
+        tipCondition={result.tip_condition}
+        calibration={result.calibration}
+        nmPerPixel={result.nm_per_pixel}
+      />
 
-      <BladeValueTable bladeValue={bs.blade_value} files={result.files} />
+      <ExtractedValuesPanel calibration={result.calibration} />
 
-      {(tipVal.n_detected_candidates != null) && (
-        <p className="muted tip-validation-line">
-          Tip validation: {tipVal.n_accepted ?? 0} accepted / {tipVal.n_detected_candidates} candidates
-          {result.calibration?.nm_per_pixel != null && (
-            <> · {fmt(result.calibration.nm_per_pixel, 3)} nm/px ({result.calibration.calibration_source || "cal"})</>
-          )}
-        </p>
-      )}
-
-      {rgCurves.length > 0 && (
-        <MethodPanel
-          tint="research"
-          title="Research-grade — Osculating circle"
-          description="Canny → RANSAC flank lines → virtual apex → curvature tip → Hough init → nonlinear refinement → geometric validation."
-          imageKey="research"
-          csvKey="research_csv"
-          files={result.files}
-          summary={{
-            count: rgSummary.accepted_count ?? rgCurves.length,
-            mean: rgSummary.mean_radius_um != null ? `${fmt(rgSummary.mean_radius_um, 3)} μm` : null,
-            meanLabel: "Mean R",
-          }}
-          rows={rgCurves.map((c) => ({
-            peak_id: c.peak_id,
-            radius_um: c.radius_um,
-            included_angle_deg: c.included_angle_deg,
-            distance_l_nm: c.distance_l_nm,
-            confidence_score: c.confidence_score,
-            fit_residual_nm: c.fit_residual_nm,
-            geometric_valid: c.geometric_valid,
-          }))}
-          columns={RESEARCH_COLUMNS}
-        />
-      )}
-
-      <section className="card image-card card-tint-sage">
-        <div className="card-header">
-          <h3>Whiteboard overlay — flanks · α · d · inscribed R</h3>
-          <a className="link-btn" href={annotated} download>Download PNG</a>
-        </div>
-        <div className="image-frame">
-          <img src={`${annotated}?t=${Date.now()}`} alt="Whiteboard tip geometry overlay" />
-        </div>
+      <section className="metrics-grid">
+        <article className="metric-card highlight">
+          <span className="metric-label">Method 1 — Median R (l = {primaryL} nm)</span>
+          <span className="metric-value">
+            {m1Val != null ? `${fmt(m1Val)} nm` : "—"}
+          </span>
+          <span className="metric-sub">
+            {m1.count ?? m1Curves.length} with radius · {nMarked} tips marked
+          </span>
+        </article>
+        <article className="metric-card highlight">
+          <span className="metric-label">Method 2 — Median projected l</span>
+          <span className="metric-value">
+            {m2Val != null ? `${fmt(m2Val)} nm` : "—"}
+          </span>
+          <span className="metric-sub">
+            {m2.count ?? m2Curves.length} tips · yellow edges · red l
+          </span>
+        </article>
+        <article className="metric-card highlight">
+          <span className="metric-label">Method 3 — Median θ (D = {d3} nm)</span>
+          <span className="metric-value">
+            {m3Angle != null ? `${fmt(m3Angle)}°` : "—"}
+          </span>
+          <span className="metric-sub">
+            {m3.count ?? m3Curves.length} tips · cyan circle · yellow rays
+          </span>
+        </article>
+        <article className="metric-card highlight">
+          <span className="metric-label">Approach 3 — Mean R (OpenAI)</span>
+          <span className="metric-value">
+            {a3Val != null ? `${fmt(a3Val)} nm` : "—"}
+          </span>
+          <span className="metric-sub">
+            {a3.count ?? a3Curves.length} fitted
+            {a3.peak_count != null ? ` / ${a3.peak_count} peaks` : ""}
+            {a3.std_radius_nm != null || a3.std != null
+              ? ` · σ ${fmt(a3.std_radius_nm ?? a3.std)} nm`
+              : ""}
+            {openaiOk === false
+              ? ` · VLM: ${openaiErr || "unavailable"}`
+              : openaiOk
+                ? ` · ${a3.openai?.model || "ok"}`
+                : ""}
+          </span>
+        </article>
       </section>
 
-      <div className="method-panels">
-        {METHOD_CONFIG.map((cfg, i) => {
-          const methodData = bs[cfg.key] || {};
-          const perCurve = methodData.per_curve || [];
-          const meanVal = methodData[cfg.valueKey] ?? methodData[cfg.fallbackKey] ?? methodData.headline_value;
-          const tints = ["blue", "lavender", "sage"];
-          return (
-            <MethodPanel
-              key={cfg.key}
-              tint={tints[i % tints.length]}
-              title={cfg.title}
-              description={cfg.description}
-              imageKey={cfg.imageKey}
-              csvKey={cfg.csvKey}
-              files={result.files}
-              summary={{
-                count: methodData.count ?? perCurve.length,
-                mean: meanVal != null ? cfg.meanFmt(meanVal) : null,
-                meanLabel: cfg.meanLabel,
-              }}
-              rows={perCurve.map(cfg.rowMap)}
-              columns={cfg.columns}
-            />
-          );
-        })}
-      </div>
-
-      <ValidationPanel validation={result.validation} files={result.files} />
-      {(result.radius_results || []).length > 0 && (
-        <RadiiTable rows={result.radius_results} files={result.files} />
+      {m1Failed.length > 0 && (
+        <div className="toast" style={{ marginBottom: "1rem" }}>
+          Method 1 marked without R:{" "}
+          {m1Failed
+            .slice(0, 12)
+            .map(
+              (c) =>
+                `tip ${c.peak_id}: ${c.rejection_reason || c.method1_rejection_reason || "invalid"}`
+            )
+            .join(" · ")}
+          {m1Failed.length > 12 ? ` · +${m1Failed.length - 12} more` : ""}
+        </div>
       )}
+
+      <div className="method-panels">
+        <MethodPanel
+          tint="blue"
+          title={METHOD1.title}
+          description={METHOD1.description}
+          imageKey={METHOD1.imageKey}
+          csvKey={METHOD1.csvKey}
+          files={result.files}
+          summary={{
+            count: nMarked,
+            mean: m1Val != null ? METHOD1.meanFmt(m1Val) : null,
+            meanLabel: `${METHOD1.meanLabel} (l = ${primaryL} nm)`,
+          }}
+          rows={[...m1Curves.map(METHOD1.rowMap), ...failRows]}
+          columns={METHOD1.columns}
+        />
+        <MethodPanel
+          tint="blue"
+          title={METHOD2.title}
+          description={METHOD2.description}
+          imageKey={METHOD2.imageKey}
+          csvKey={METHOD2.csvKey}
+          files={result.files}
+          summary={{
+            count: m2.count ?? m2Curves.length,
+            mean: m2Val != null ? METHOD2.meanFmt(m2Val) : null,
+            meanLabel: METHOD2.meanLabel,
+          }}
+          rows={m2Curves.map(METHOD2.rowMap)}
+          columns={METHOD2.columns}
+        />
+        <MethodPanel
+          tint="blue"
+          title={METHOD3.title}
+          description={METHOD3.description}
+          imageKey={METHOD3.imageKey}
+          csvKey={METHOD3.csvKey}
+          files={result.files}
+          summary={{
+            count: m3.count ?? m3Curves.length,
+            mean: m3Angle != null ? METHOD3.meanFmt(m3Angle) : null,
+            meanLabel: `${METHOD3.meanLabel} (D = ${d3} nm)`,
+          }}
+          rows={m3Curves.map(METHOD3.rowMap)}
+          columns={METHOD3.columns}
+        />
+        <MethodPanel
+          tint="blue"
+          title={APPROACH3.title}
+          description={
+            openaiOk === false
+              ? `${APPROACH3.description}\n\nOpenAI status: ${openaiErr || "unavailable — set OPENAI_API_KEY in backend .env"}`
+              : APPROACH3.description
+          }
+          imageKey={APPROACH3.imageKey}
+          csvKey={APPROACH3.csvKey}
+          files={result.files}
+          summary={{
+            count: (a3.count ?? a3Curves.length) + a3Failed.length,
+            mean: a3Val != null ? APPROACH3.meanFmt(a3Val) : null,
+            meanLabel: `${APPROACH3.meanLabel} (l = ${primaryL} nm)`,
+          }}
+          rows={[
+            ...a3Curves.map(APPROACH3.rowMap),
+            ...a3Failed.map((c) => ({
+              peak_id: c.peak_id,
+              peak_x: c.peak_location?.[0],
+              peak_y: c.peak_location?.[1],
+              radius_nm: c.rejection_reason || "—",
+            })),
+          ]}
+          columns={APPROACH3.columns}
+        />
+      </div>
     </div>
   );
 }
