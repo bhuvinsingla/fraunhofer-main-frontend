@@ -95,13 +95,18 @@ const APPROACH3 = {
   key: "approach3_openai_vlm",
   title: "OpenAI Vision tip radius",
   description:
-    "1. Start from the same tip locations as fixed-distance circle\n" +
-    "2. Fit cone / flank geometry around each tip\n" +
-    "3. Inscribe a circle at the apex (whiteboard construction)\n" +
-    "4. Output tip radius R in nm\n" +
-    "Optional OpenAI Vision assists contour / circle fit when configured\n" +
+    "1. OpenAI / Vision tip peaks (yellow)\n" +
+    "2. Contour around each apex (green)\n" +
+    "3. Circle fit → tip radius R in nm (cyan)\n" +
     "Requires OPENAI_API_KEY in backend .env for Vision steps",
+  secondaryDescription:
+    "1. Identify ultimate tip (top blue dot)\n" +
+    "2. Project a horizontal (red) line a predefined set distance \"l\" below upper dot\n" +
+    "3. Identify intersection of red line with blade edge (lower 2 blue dots)\n" +
+    "4. Inscribe a circle using 3 blue dots\n" +
+    "5. Output is the radius of this circle",
   imageKey: "method1_approach3",
+  secondaryImageKey: "method1_approach3_fixed_distance",
   csvKey: "method1_approach3_csv",
   valueKey: "mean_radius_nm",
   fallbackKey: "median_radius_nm",
@@ -487,6 +492,9 @@ export default function ResultsDashboard({ result }) {
               : APPROACH3.description
           }
           imageKey={APPROACH3.imageKey}
+          secondaryImageKey={APPROACH3.secondaryImageKey}
+          secondaryDescription={APPROACH3.secondaryDescription}
+          secondaryFlowTitle="Fixed-distance circle steps"
           csvKey={APPROACH3.csvKey}
           files={result.files}
           summary={{

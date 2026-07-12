@@ -10,6 +10,36 @@ function parseFlowSteps(description) {
     .map((line) => line.replace(/^\d+\.\s*/, ""));
 }
 
+function VisualRow({ imageUrl, title, flowSteps, flowTitle = "How it works" }) {
+  if (!imageUrl && flowSteps.length === 0) return null;
+  const cacheBust = imageUrl ? `${imageUrl}?t=${Date.now()}` : null;
+  return (
+    <div className="method-visual-row">
+      {cacheBust && (
+        <div className="method-image-zoom-wrap">
+          <div className="image-frame method-image">
+            <img src={cacheBust} alt={title} />
+            <span className="method-zoom-hint">Hover to enlarge</span>
+          </div>
+          <div className="method-zoom-overlay" aria-hidden="true">
+            <img src={cacheBust} alt="" />
+          </div>
+        </div>
+      )}
+      {flowSteps.length > 0 && (
+        <aside className="method-flow">
+          <h4 className="method-flow-title">{flowTitle}</h4>
+          <ol className="method-flow-steps">
+            {flowSteps.map((step, i) => (
+              <li key={i}>{step}</li>
+            ))}
+          </ol>
+        </aside>
+      )}
+    </div>
+  );
+}
+
 export default function MethodPanel({
   title,
   description,
@@ -20,11 +50,18 @@ export default function MethodPanel({
   rows,
   columns,
   tint = "default",
+  secondaryImageKey = null,
+  secondaryDescription = null,
+  secondaryFlowTitle = "Next steps",
 }) {
   const imageUrl = files?.[imageKey] ? fileUrl(files[imageKey]) : null;
+  const secondaryUrl =
+    secondaryImageKey && files?.[secondaryImageKey]
+      ? fileUrl(files[secondaryImageKey])
+      : null;
   const csvUrl = files?.[csvKey] ? fileUrl(files[csvKey]) : null;
   const flowSteps = parseFlowSteps(description);
-  const cacheBust = imageUrl ? `${imageUrl}?t=${Date.now()}` : null;
+  const secondarySteps = parseFlowSteps(secondaryDescription);
 
   return (
     <section className={`card method-panel card-tint-${tint}`}>
@@ -42,30 +79,18 @@ export default function MethodPanel({
         </div>
       </div>
 
-      {(imageUrl || flowSteps.length > 0) && (
-        <div className="method-visual-row">
-          {imageUrl && (
-            <div className="method-image-zoom-wrap">
-              <div className="image-frame method-image">
-                <img src={cacheBust} alt={title} />
-                <span className="method-zoom-hint">Hover to enlarge</span>
-              </div>
-              <div className="method-zoom-overlay" aria-hidden="true">
-                <img src={cacheBust} alt="" />
-              </div>
-            </div>
-          )}
-          {flowSteps.length > 0 && (
-            <aside className="method-flow">
-              <h4 className="method-flow-title">How it works</h4>
-              <ol className="method-flow-steps">
-                {flowSteps.map((step, i) => (
-                  <li key={i}>{step}</li>
-                ))}
-              </ol>
-            </aside>
-          )}
-        </div>
+      <VisualRow
+        imageUrl={imageUrl}
+        title={title}
+        flowSteps={flowSteps}
+      />
+      {(secondaryUrl || secondarySteps.length > 0) && (
+        <VisualRow
+          imageUrl={secondaryUrl}
+          title={`${title} — fixed-distance circle`}
+          flowSteps={secondarySteps}
+          flowTitle={secondaryFlowTitle}
+        />
       )}
 
       <div className="method-panel-footer">

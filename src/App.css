@@ -875,7 +875,7 @@ body {
   grid-template-columns: minmax(0, 1.35fr) minmax(220px, 0.85fr);
   gap: 1rem;
   align-items: start;
-  margin-bottom: 0.75rem;
+  margin-bottom: 1rem;
 }
 
 .method-image {
