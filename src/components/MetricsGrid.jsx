@@ -18,7 +18,7 @@ export default function MetricsGrid({ result }) {
   return (
     <section className="metrics-grid">
       <article className="metric-card highlight">
-        <span className="metric-label">Method 1 — Fixed distance circle (l = {primaryL} nm)</span>
+        <span className="metric-label">Fixed-distance inscribed circle (l = {primaryL} nm)</span>
         <span className="metric-value">
           {m1 != null ? `${fmt(m1)} nm` : "—"}
         </span>
@@ -27,7 +27,7 @@ export default function MetricsGrid({ result }) {
         </span>
       </article>
       <article className="metric-card highlight">
-        <span className="metric-label">Method 2 — Projected tip distance</span>
+        <span className="metric-label">Projected tip distance</span>
         <span className="metric-value">
           {m2 != null ? `${fmt(m2)} nm` : "—"}
         </span>
@@ -36,7 +36,7 @@ export default function MetricsGrid({ result }) {
         </span>
       </article>
       <article className="metric-card highlight">
-        <span className="metric-label">Method 3 — Inscribed angle (D = {d3} nm)</span>
+        <span className="metric-label">Inscribed angle (D = {d3} nm)</span>
         <span className="metric-value">
           {m3 != null ? `${fmt(m3)}°` : "—"}
         </span>

@@ -160,8 +160,7 @@ export default function App() {
       console.log("FULL RESULT:", data);
       console.groupEnd();
 
-      const name = data.source_path?.split("/").pop() || "image";
-      setStatus(`Analysis complete — ${name}`);
+      setStatus("Analysis complete");
     } catch (err) {
       console.error("Analysis failed (before/during pipeline):", err);
       setError(err.message);

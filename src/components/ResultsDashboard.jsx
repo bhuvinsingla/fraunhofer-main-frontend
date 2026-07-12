@@ -1,11 +1,12 @@
+import { useState } from "react";
 import MethodPanel from "./MethodPanel";
 
 const fmt = (v, d = 2) => (v == null || Number.isNaN(v) ? "—" : Number(v).toFixed(d));
 
-/** PDF slide 2 — Fixed distance inscribed circle */
+/** Fixed-distance inscribed circle */
 const METHOD1 = {
   key: "fixed_distance_circle",
-  title: "Fixed distance inscribed circle",
+  title: "Fixed-distance inscribed circle",
   description:
     "1. Identify ultimate tip (top blue dot)\n" +
     "2. Project a horizontal (red) line a predefined set distance \"l\" below upper dot\n" +
@@ -33,10 +34,10 @@ const METHOD1 = {
   }),
 };
 
-/** PDF slide 3 — Distance from projected tip */
+/** Projected tip distance */
 const METHOD2 = {
   key: "projected_tip_distance",
-  title: "Distance from projected tip",
+  title: "Projected tip distance",
   description:
     "1. Project edges of arch (yellow) to a convergent point\n" +
     "2. Draw vertical line (red) down to ultimate tip (blue)\n" +
@@ -61,10 +62,10 @@ const METHOD2 = {
   }),
 };
 
-/** PDF slide 4 — Inscribed angle from fixed radius circle */
+/** Inscribed angle from fixed-diameter circle */
 const METHOD3 = {
   key: "inscribed_angle",
-  title: "Inscribed angle from fixed diameter circle",
+  title: "Inscribed angle (fixed diameter)",
   description:
     "1. Inscribe circle of predetermined diameter \"D\"\n" +
     "2. Project two lines from ultimate tip through circle/blade intersections\n" +
@@ -89,23 +90,22 @@ const METHOD3 = {
   }),
 };
 
-/** Approach 3 — OpenAI peaks + contour → OpenCV refine → circle fit */
+/** OpenAI Vision tip-radius fit */
 const APPROACH3 = {
   key: "approach3_openai_vlm",
-  title: "Approach 3 — OpenAI Vision + Circle Fit",
+  title: "OpenAI Vision tip radius",
   description:
-    "1. OpenCV preprocess (shared pipeline)\n" +
-    "2. OpenAI detects all tip peaks (ignore noise)\n" +
-    "3. Crop each peak ROI\n" +
-    "4. OpenAI outlines the curved apex (polygon + confidence)\n" +
-    "5. OpenCV refines contour via edge snap\n" +
-    "6. Circle fit (Pratt / Taubin / least-squares) → R in nm\n" +
-    "Requires OPENAI_API_KEY in backend .env",
+    "1. Start from the same tip locations as fixed-distance circle\n" +
+    "2. Fit cone / flank geometry around each tip\n" +
+    "3. Inscribe a circle at the apex (whiteboard construction)\n" +
+    "4. Output tip radius R in nm\n" +
+    "Optional OpenAI Vision assists contour / circle fit when configured\n" +
+    "Requires OPENAI_API_KEY in backend .env for Vision steps",
   imageKey: "method1_approach3",
   csvKey: "method1_approach3_csv",
   valueKey: "mean_radius_nm",
   fallbackKey: "median_radius_nm",
-  meanLabel: "Mean R (OpenAI + circle fit)",
+  meanLabel: "Mean R",
   meanFmt: (v) => `${fmt(v)} nm`,
   columns: [
     { key: "peak_id", label: "Peak" },
@@ -143,6 +143,7 @@ function formatValue(v) {
 }
 
 function ExtractedValuesPanel({ calibration }) {
+  const [open, setOpen] = useState(false);
   if (!calibration) return null;
   const combined = calibration.extracted_values || {};
   const zeissAll = calibration.zeiss_all || {};
@@ -168,7 +169,7 @@ function ExtractedValuesPanel({ calibration }) {
   }));
 
   return (
-    <section className="card method-panel" style={{ marginBottom: "1.25rem" }}>
+    <section className="card method-panel sem-values-panel" style={{ marginBottom: "1.25rem" }}>
       <div className="card-header">
         <div>
           <h3>SEM values (OCR + Zeiss metadata)</h3>
@@ -180,78 +181,90 @@ function ExtractedValuesPanel({ calibration }) {
             Zeiss keys: {Object.keys(zeissAll).length}
           </p>
         </div>
+        <button
+          type="button"
+          className="btn-ghost sem-values-toggle"
+          onClick={() => setOpen((v) => !v)}
+          aria-expanded={open}
+        >
+          {open ? "Hide" : "Show"}
+        </button>
       </div>
-      {ocr.raw_text ? (
-        <p className="protocol-banner-note" style={{ marginTop: "0.5rem", whiteSpace: "pre-wrap" }}>
-          <strong>OCR text:</strong>
-          {"\n"}
-          {ocr.raw_text}
-        </p>
-      ) : null}
-      {combinedRows.length > 0 && (
-        <>
-          <h4 style={{ margin: "0.75rem 0 0.35rem", fontSize: "0.9rem" }}>Combined fields</h4>
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>Field</th>
-                <th>Value</th>
-              </tr>
-            </thead>
-            <tbody>
-              {combinedRows.map((r) => (
-                <tr key={`c-${r.key}`}>
-                  <td>{r.key}</td>
-                  <td style={{ wordBreak: "break-word" }}>{r.value}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </>
-      )}
-      {ocrRows.length > 0 && (
-        <>
-          <h4 style={{ margin: "0.75rem 0 0.35rem", fontSize: "0.9rem" }}>OCR-parsed</h4>
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>Field</th>
-                <th>Value</th>
-              </tr>
-            </thead>
-            <tbody>
-              {ocrRows.map((r) => (
-                <tr key={`o-${r.key}`}>
-                  <td>{r.key}</td>
-                  <td style={{ wordBreak: "break-word" }}>{r.value}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </>
-      )}
-      {zeissRows.length > 0 && (
-        <>
-          <h4 style={{ margin: "0.75rem 0 0.35rem", fontSize: "0.9rem" }}>
-            Zeiss SmartSEM ({zeissRows.length})
-          </h4>
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>Key</th>
-                <th>Value</th>
-              </tr>
-            </thead>
-            <tbody>
-              {zeissRows.map((r) => (
-                <tr key={`z-${r.key}`}>
-                  <td>{r.key}</td>
-                  <td style={{ wordBreak: "break-word" }}>{r.value}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </>
+      {open && (
+        <div className="sem-values-body">
+          {ocr.raw_text ? (
+            <p className="protocol-banner-note" style={{ marginTop: "0.5rem", whiteSpace: "pre-wrap" }}>
+              <strong>OCR text:</strong>
+              {"\n"}
+              {ocr.raw_text}
+            </p>
+          ) : null}
+          {combinedRows.length > 0 && (
+            <>
+              <h4 style={{ margin: "0.75rem 0 0.35rem", fontSize: "0.9rem" }}>Combined fields</h4>
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Field</th>
+                    <th>Value</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {combinedRows.map((r) => (
+                    <tr key={`c-${r.key}`}>
+                      <td>{r.key}</td>
+                      <td style={{ wordBreak: "break-word" }}>{r.value}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </>
+          )}
+          {ocrRows.length > 0 && (
+            <>
+              <h4 style={{ margin: "0.75rem 0 0.35rem", fontSize: "0.9rem" }}>OCR-parsed</h4>
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Field</th>
+                    <th>Value</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {ocrRows.map((r) => (
+                    <tr key={`o-${r.key}`}>
+                      <td>{r.key}</td>
+                      <td style={{ wordBreak: "break-word" }}>{r.value}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </>
+          )}
+          {zeissRows.length > 0 && (
+            <>
+              <h4 style={{ margin: "0.75rem 0 0.35rem", fontSize: "0.9rem" }}>
+                Zeiss SmartSEM ({zeissRows.length})
+              </h4>
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Key</th>
+                    <th>Value</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {zeissRows.map((r) => (
+                    <tr key={`z-${r.key}`}>
+                      <td>{r.key}</td>
+                      <td style={{ wordBreak: "break-word" }}>{r.value}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </>
+          )}
+        </div>
       )}
     </section>
   );
@@ -266,16 +279,16 @@ function TipRadiusBanner({ protocol, tipCondition, calibration, nmPerPixel }) {
     (source === "config_default" || source === "tiff_metadata" || !source);
   return (
     <div className={`protocol-banner ${untrusted ? "pending" : "approved"}`}>
-      <strong>Tip Radius Measurement — PDF Methods 1–3 + OpenAI Approach 3</strong>
+      <strong>Tip Radius Measurement</strong>
       <p className="protocol-banner-note" style={{ whiteSpace: "pre-line" }}>
-        {"Method 1 — Fixed distance inscribed circle (l = " +
+        {"Fixed-distance inscribed circle (l = " +
           primary +
           " nm)\n" +
-          "Method 2 — Distance from projected tip\n" +
-          "Method 3 — Inscribed angle from fixed diameter circle (D = " +
+          "Projected tip distance\n" +
+          "Inscribed angle (D = " +
           d3 +
           " nm)\n" +
-          "Approach 3 — OpenAI peaks + contour → circle fit"}
+          "OpenAI Vision tip radius"}
       </p>
       <p className="protocol-banner-note">
         Scale: {nmPerPixel != null ? `${Number(nmPerPixel).toFixed(4)} nm/px` : "—"}
@@ -359,7 +372,7 @@ export default function ResultsDashboard({ result }) {
 
       <section className="metrics-grid">
         <article className="metric-card highlight">
-          <span className="metric-label">Method 1 — Median R (l = {primaryL} nm)</span>
+          <span className="metric-label">Fixed-distance circle — Median R (l = {primaryL} nm)</span>
           <span className="metric-value">
             {m1Val != null ? `${fmt(m1Val)} nm` : "—"}
           </span>
@@ -368,7 +381,7 @@ export default function ResultsDashboard({ result }) {
           </span>
         </article>
         <article className="metric-card highlight">
-          <span className="metric-label">Method 2 — Median projected l</span>
+          <span className="metric-label">Projected tip distance — Median l</span>
           <span className="metric-value">
             {m2Val != null ? `${fmt(m2Val)} nm` : "—"}
           </span>
@@ -377,7 +390,7 @@ export default function ResultsDashboard({ result }) {
           </span>
         </article>
         <article className="metric-card highlight">
-          <span className="metric-label">Method 3 — Median θ (D = {d3} nm)</span>
+          <span className="metric-label">Inscribed angle — Median θ (D = {d3} nm)</span>
           <span className="metric-value">
             {m3Angle != null ? `${fmt(m3Angle)}°` : "—"}
           </span>
@@ -386,7 +399,7 @@ export default function ResultsDashboard({ result }) {
           </span>
         </article>
         <article className="metric-card highlight">
-          <span className="metric-label">Approach 3 — Mean R (OpenAI)</span>
+          <span className="metric-label">OpenAI Vision tip radius — Mean R</span>
           <span className="metric-value">
             {a3Val != null ? `${fmt(a3Val)} nm` : "—"}
           </span>
@@ -407,7 +420,7 @@ export default function ResultsDashboard({ result }) {
 
       {m1Failed.length > 0 && (
         <div className="toast" style={{ marginBottom: "1rem" }}>
-          Method 1 marked without R:{" "}
+          Fixed-distance circle marked without R:{" "}
           {m1Failed
             .slice(0, 12)
             .map(
@@ -479,7 +492,7 @@ export default function ResultsDashboard({ result }) {
           summary={{
             count: (a3.count ?? a3Curves.length) + a3Failed.length,
             mean: a3Val != null ? APPROACH3.meanFmt(a3Val) : null,
-            meanLabel: `${APPROACH3.meanLabel} (l = ${primaryL} nm)`,
+            meanLabel: APPROACH3.meanLabel,
           }}
           rows={[
             ...a3Curves.map(APPROACH3.rowMap),
