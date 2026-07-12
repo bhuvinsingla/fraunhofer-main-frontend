@@ -50,18 +50,25 @@ export default function MethodPanel({
   rows,
   columns,
   tint = "default",
+  /** @type {{ imageKey: string, description: string, flowTitle?: string, titleSuffix?: string }[]} */
+  extraVisuals = [],
   secondaryImageKey = null,
   secondaryDescription = null,
   secondaryFlowTitle = "Next steps",
 }) {
   const imageUrl = files?.[imageKey] ? fileUrl(files[imageKey]) : null;
-  const secondaryUrl =
-    secondaryImageKey && files?.[secondaryImageKey]
-      ? fileUrl(files[secondaryImageKey])
-      : null;
   const csvUrl = files?.[csvKey] ? fileUrl(files[csvKey]) : null;
   const flowSteps = parseFlowSteps(description);
-  const secondarySteps = parseFlowSteps(secondaryDescription);
+
+  const extras = [...extraVisuals];
+  if (secondaryImageKey || secondaryDescription) {
+    extras.unshift({
+      imageKey: secondaryImageKey,
+      description: secondaryDescription,
+      flowTitle: secondaryFlowTitle,
+      titleSuffix: "fixed-distance inscribed circle",
+    });
+  }
 
   return (
     <section className={`card method-panel card-tint-${tint}`}>
@@ -79,19 +86,25 @@ export default function MethodPanel({
         </div>
       </div>
 
-      <VisualRow
-        imageUrl={imageUrl}
-        title={title}
-        flowSteps={flowSteps}
-      />
-      {(secondaryUrl || secondarySteps.length > 0) && (
-        <VisualRow
-          imageUrl={secondaryUrl}
-          title={`${title} — fixed-distance circle`}
-          flowSteps={secondarySteps}
-          flowTitle={secondaryFlowTitle}
-        />
-      )}
+      <VisualRow imageUrl={imageUrl} title={title} flowSteps={flowSteps} />
+
+      {extras.map((extra, idx) => {
+        const url =
+          extra.imageKey && files?.[extra.imageKey]
+            ? fileUrl(files[extra.imageKey])
+            : null;
+        const steps = parseFlowSteps(extra.description);
+        if (!url && steps.length === 0) return null;
+        return (
+          <VisualRow
+            key={`${extra.imageKey || "extra"}-${idx}`}
+            imageUrl={url}
+            title={`${title} — ${extra.titleSuffix || extra.flowTitle || `step ${idx + 2}`}`}
+            flowSteps={steps}
+            flowTitle={extra.flowTitle || "Next steps"}
+          />
+        );
+      })}
 
       <div className="method-panel-footer">
         {csvUrl && (

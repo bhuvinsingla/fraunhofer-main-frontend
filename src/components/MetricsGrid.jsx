@@ -18,7 +18,7 @@ export default function MetricsGrid({ result }) {
   return (
     <section className="metrics-grid">
       <article className="metric-card highlight">
-        <span className="metric-label">Fixed-distance inscribed circle (l = {primaryL} nm)</span>
+        <span className="metric-label">Fixed-distance circle → R (l = {primaryL} nm)</span>
         <span className="metric-value">
           {m1 != null ? `${fmt(m1)} nm` : "—"}
         </span>
@@ -27,21 +27,21 @@ export default function MetricsGrid({ result }) {
         </span>
       </article>
       <article className="metric-card highlight">
-        <span className="metric-label">Projected tip distance</span>
+        <span className="metric-label">Projected tip distance → l</span>
         <span className="metric-value">
           {m2 != null ? `${fmt(m2)} nm` : "—"}
         </span>
         <span className="metric-sub">
-          {ptd.count ?? 0} tips · yellow edges · red l
+          {ptd.count ?? 0} tips · P_proj → T · larger l = blunter
         </span>
       </article>
       <article className="metric-card highlight">
-        <span className="metric-label">Inscribed angle (D = {d3} nm)</span>
+        <span className="metric-label">Included angle → θ (D = {d3} nm)</span>
         <span className="metric-value">
           {m3 != null ? `${fmt(m3)}°` : "—"}
         </span>
         <span className="metric-sub">
-          {ia.count ?? 0} tips · cyan circle · θ
+          {ia.count ?? 0} tips · Interp. A · rays T→P_L / T→P_R
         </span>
       </article>
     </section>
